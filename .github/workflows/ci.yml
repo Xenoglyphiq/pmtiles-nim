@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.2.12'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate vendored spec
+        run: uv run .kit/validate.py .spec
+
+      - name: Install dependencies
+        run: nimble install -y --depsOnly
+
+      - name: Check (raises tracking, no warnings)
+        run: nim check --hints:off src/pmtiles.nim && nim check --hints:off -d:ssl src/pmtiles/io.nim
+
+      - name: Unit tests and conformance
+        run: nimble test
+
+      - name: Canonical examples
+        run: nimble examples
+
+      - name: Short fuzz run
+        run: FUZZ_SECONDS=30 nimble fuzz
+
+      - name: Benchmark runs and matches the checksum (timings not recorded from CI)
+        run: if [ -d .spec/bench ]; then nimble bench; else echo "spec bench input not vendored yet"; fi
