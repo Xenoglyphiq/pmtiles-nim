@@ -4,13 +4,14 @@
 ##
 ## Re-exports the core module, so `import pmtiles/io` is enough.
 ##
-## Internal compression: `none` and `gzip` (via zippy). `brotli`, `zstd`,
-## `unknown` and unknown raw values raise `pmtiles.unsupported_compression`.
+## Internal compression: `none` and `gzip` (a small built-in decoder that stops
+## at the size limit). `brotli`, `zstd`, `unknown` and unknown raw values raise
+## `pmtiles.unsupported_compression`.
 ##
 ## `httpSource` uses `std/httpclient`; build with `-d:ssl` for `https` URLs.
 
 import std/httpclient
-import zippy
+import ./gzip
 import ../pmtiles
 
 export pmtiles
@@ -135,22 +136,24 @@ proc readExact(src: Source, offset, length: uint64, what: string): seq[byte]
   if uint64(result.len) > length:
     result.setLen(int(length))
 
-proc decompress(data: sink seq[byte], c: Compression, failCode, what: string): string
-               {.raises: [PMTilesError].} =
-  ## Internal decompression (spec §3, Decompression). `failCode` is the error
-  ## for a stream that doesn't decompress.
+proc decompress(data: sink seq[byte], c: Compression, limit: uint64,
+                tooLargeCode, what: string): string {.raises: [PMTilesError].} =
+  ## Internal decompression (spec §3, Decompression). Output above `limit`
+  ## bytes raises `tooLargeCode`, found while decompressing, not after; a
+  ## stream that doesn't decode is `pmtiles.decompression_failed` (D-006).
   case c.kind
   of ckNone:
     result = newString(data.len)
     if data.len > 0:
       copyMem(addr result[0], addr data[0], data.len)
   of ckGzip:
-    if data.len == 0:
-      raise newError(failCode, msg = what & " is not valid gzip: empty")
-    try:
-      result = uncompress(addr data[0], data.len, dfGzip)
-    except ZippyError as e:
-      raise newError(failCode, msg = what & " is not valid gzip: " & e.msg)
+    case gunzip(data, int(min(limit, uint64(high(int)))), result)
+    of isOk: discard
+    of isCorrupt:
+      raise newError("pmtiles.decompression_failed", msg = what & " is not valid gzip")
+    of isTooLarge:
+      raise newError(tooLargeCode, ekLimitExceeded,
+                     msg = what & " decompresses to more than " & $limit & " bytes")
   of ckUnknown, ckBrotli, ckZstd, ckUnknownValue:
     raise newError("pmtiles.unsupported_compression", ekUnsupported,
                    msg = "internal compression " & $c & " is not supported")
@@ -177,8 +180,8 @@ proc getTile*(src: Source, coord: TileCoord, limits = Limits()): Option[seq[byte
     if length > limits.maxDirectoryBytes:
       raise newError("pmtiles.directory_too_large", ekLimitExceeded,
                      msg = "directory is " & $length & " bytes, limit " & $limits.maxDirectoryBytes)
-    let dir = decompress(readExact(src, offset, length, "directory"),
-                         h.internalCompression, "pmtiles.invalid_directory", "directory")
+    let dir = decompress(readExact(src, offset, length, "directory"), h.internalCompression,
+                         limits.maxDirectoryBytes, "pmtiles.directory_too_large", "directory")
     let entries = decodeDirectory(dir.toOpenArrayByte(0, dir.high), limits)
     let found = findEntry(entries, tileId)
     if found.isNone:
@@ -196,11 +199,15 @@ proc getTile*(src: Source, coord: TileCoord, limits = Limits()): Option[seq[byte
 
 proc readMetadata*(src: Source, limits = Limits()): string {.raises: [PMTilesError].} =
   ## Spec operation `read_metadata`. The archive's JSON metadata, decompressed
-  ## but not parsed.
+  ## but not parsed. Metadata that isn't well-formed UTF-8 raises
+  ## `pmtiles.invalid_metadata` (D-007).
   let h = readHeader(src)
   if h.metadataLength > limits.maxMetadataBytes:
     raise newError("pmtiles.metadata_too_large", ekLimitExceeded,
                    msg = "metadata is " & $h.metadataLength & " bytes, limit " &
                          $limits.maxMetadataBytes)
-  decompress(readExact(src, h.metadataOffset, h.metadataLength, "metadata"),
-             h.internalCompression, "pmtiles.truncated", "metadata")
+  result = decompress(readExact(src, h.metadataOffset, h.metadataLength, "metadata"),
+                      h.internalCompression, limits.maxMetadataBytes,
+                      "pmtiles.metadata_too_large", "metadata")
+  if not isWellFormedUtf8(result):
+    raise newError("pmtiles.invalid_metadata", msg = "metadata is not well-formed UTF-8")

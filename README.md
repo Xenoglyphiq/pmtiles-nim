@@ -1,23 +1,23 @@
 # PMTiles for Nim
 
-Read PMTiles v3 single-file tile archives: header, directories, tile lookup and tile bytes, from memory, a local file or HTTP range requests. Implements PMTiles v3 (read only) · Spec v0.1.1 · Conformance: **core ✓ io ✓ full ✓** (68/68)
+Read PMTiles v3 single-file tile archives: header, directories, tile lookup and tile bytes, from memory, a local file or HTTP range requests. Implements PMTiles v3 (read only) · Spec v0.2.0 · Conformance: **core ✓ io ✓ full ✓** (81/81)
 
 > **Tile bytes are returned as stored.** `getTile` gives you the tile still compressed with `header.tileCompression` and doesn't parse it. Decoding MVT, PNG or other contents is up to you.
 
-Requires Nim **2.2.12** on the C backend (the JS backend is untested). Depends on [zippy](https://github.com/guzba/zippy) (pure Nim) for gzip.
+Requires Nim **2.2.12** on the C backend (the JS backend is untested). Standard library only.
 
 ## Install
 
 > Listing in the Nimble directory (`nimble install pmtiles`) is pending; until it lands, install by URL as below.
 
 ```
-nimble install https://github.com/Xenoglyphiq/pmtiles-nim@#v0.1.0
+nimble install https://github.com/Xenoglyphiq/pmtiles-nim@#v0.2.0
 ```
 
 Or in your `.nimble` file:
 
 ```nim
-requires "https://github.com/Xenoglyphiq/pmtiles-nim#v0.1.0"
+requires "https://github.com/Xenoglyphiq/pmtiles-nim#v0.2.0"
 ```
 
 ## Quick start
@@ -88,11 +88,13 @@ A source returns up to `length` bytes; fewer means the archive ends there, which
 | Compression | Supported |
 |---|---|
 | `none` | yes |
-| `gzip` | yes (zippy) |
+| `gzip` | yes (built-in decoder; stops at the size limit, checks the CRC-32 and length) |
 | `brotli`, `zstd` | no: `pmtiles.unsupported_compression` |
 | `unknown`, unknown raw values | no: `pmtiles.unsupported_compression` |
 
-A gzip stream that doesn't decompress is `pmtiles.invalid_directory` for a directory and `pmtiles.truncated` for the metadata.
+A compressed stream that doesn't decode (corrupt, cut short, or a gzip CRC-32 or length mismatch) is `pmtiles.decompression_failed`. Decompression stops as soon as the output would pass `maxDirectoryBytes` or `maxMetadataBytes`, so a small archive can't expand without bound.
+
+**Metadata** must be well-formed UTF-8 (strict RFC 3629: no encoded surrogates, nothing above U+10FFFF); anything else is `pmtiles.invalid_metadata`. The JSON itself isn't parsed.
 
 ## Limits and errors
 
@@ -114,7 +116,7 @@ Every public proc is annotated `{.raises: [PMTilesError].}` (or raises nothing).
 | Module | Layer | Needs |
 |---|---|---|
 | `pmtiles` | core | nothing beyond the standard library |
-| `pmtiles/io` | io | zippy; `std/httpclient` (`-d:ssl` for https) |
+| `pmtiles/io` | io | `std/httpclient` (`-d:ssl` for https) |
 
 `pmtiles/io` re-exports `pmtiles`.
 

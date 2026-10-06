@@ -1,24 +1,27 @@
-## Mutation fuzzer for `decodeHeader`, `decodeDirectory`, `getTile` and
-## `readMetadata` (no fuzzing library needed).
+## Mutation fuzzer for `decodeHeader`, `decodeDirectory`, `getTile`,
+## `readMetadata` and the built-in gzip decoder (no fuzzing library needed).
 ##
 ## Corpus: every `base64` and `file` input of a `decode_header` or
 ## `decode_directory` case in `.spec/conformance/manifest.json`, plus every
-## archive in `.spec/conformance/cases/archives/`. Each iteration takes a
+## archive in `.spec/conformance/cases/archives/`, plus real deflate streams
+## (`gzipvectors`), since the archives only use stored and fixed blocks. Each
+## iteration takes a
 ## corpus entry, applies 1-4 random mutations and runs all four operations on
 ## it (the io ones over a memory source holding the mutated bytes, for a few
 ## coordinates). Invariants:
 ##   - only `PMTilesError` escapes; any other exception or defect is a failure;
 ##   - a raised error always has a non-empty `code`;
 ##   - a directory that decodes has strictly increasing tile ids, and encoding
-##     it again decodes to the same entries.
+##     it again decodes to the same entries;
+##   - `gunzip` never returns more than its limit, and decoding is deterministic.
 ##
 ## Environment: `FUZZ_SECONDS` (default 10), `FUZZ_SEED` (default: time-based).
 ## Build with overflow, range and bound checks on, and `-d:pmtilesChecked`
 ## (see `nimble fuzz`), so a missing guard turns into a defect the harness catches.
 
 import std/[base64, json, monotimes, os, random, sequtils, strutils, tables, times]
-import pmtiles/io
-import builders
+import pmtiles/[gzip, io]
+import builders, gzipvectors
 
 proc toBytes(s: string): seq[byte] =
   result = newSeq[byte](s.len)
@@ -33,6 +36,7 @@ proc loadCorpus(): seq[seq[byte]] =
     elif input.hasKey("file"): result.add toBytes(readFile(conformance / "cases" / input["file"].getStr))
   for path in walkFiles(conformance / "cases" / "archives" / "*.pmtiles"):
     result.add toBytes(readFile(path))
+  for v in vectors: result.add bytes(v[1])
 
 const interesting = [0'u64, 1, 0x7F, 0x80, 127, 0xFFFF_FFFF'u64, 0x1_0000_0000'u64,
                      0x7FFF_FFFF_FFFF_FFFF'u64, high(uint64), high(uint64) - 1]
@@ -101,6 +105,17 @@ template guarded(input: seq[byte], what: string, body: untyped) =
     failWith(input, what & " raised " & $e.name & ": " & e.msg)
 
 proc check(r: var Rand, input: seq[byte]) =
+  guarded(input, "gunzip"):
+    let limit = 1 shl 16
+    var output, again: string
+    let status = gunzip(input, limit, output)
+    if output.len > limit: failWith(input, "gunzip: output above the limit")
+    if status == isOk:
+      outcomes.inc "gunzip succeeded"
+      if gunzip(input, limit, again) != isOk or again != output:
+        failWith(input, "gunzip: decoding the same input twice differs")
+    elif output.len != 0:
+      failWith(input, "gunzip: failed but returned output")
   guarded(input, "decodeHeader"):
     discard decodeHeader(input)
 
