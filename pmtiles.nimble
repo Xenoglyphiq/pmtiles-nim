@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.2.0"
 author        = "Xenoglyphiq contributors"
 description   = "Read PMTiles v3 tile archives: header, directories, tile lookup and tile bytes"
 license       = "MIT OR Apache-2.0"
@@ -9,7 +9,6 @@ srcDir        = "src"
 # Dependencies
 
 requires "nim >= 2.2.12"
-requires "zippy >= 0.10.20"
 
 # Tasks
 

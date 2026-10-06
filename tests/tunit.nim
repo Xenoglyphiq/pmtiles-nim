@@ -213,12 +213,12 @@ suite "io":
         discard readMetadata(src))
       check e != nil and e.code == "pmtiles.unsupported_compression" and e.kind == ekUnsupported
 
-  test "a gzip directory that doesn't decompress":
+  test "a gzip directory that doesn't decompress (spec D-006)":
     let src = memorySource(buildArchive(toBytes("not gzip at all, but long enough"),
                                         toBytes("{}"), [], [], 2))
     let e = errorOf(proc () {.raises: [PMTilesError].} =
       discard getTile(src, TileCoord(z: 0)))
-    check e != nil and e.code == "pmtiles.invalid_directory"
+    check e != nil and e.code == "pmtiles.decompression_failed"
 
   test "a source that ends early":
     let full = buildArchive(encodeDirectory([Entry(tileId: 0, offset: 0, length: 4, runLength: 1)]),
