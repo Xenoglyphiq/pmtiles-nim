@@ -1,0 +1,11 @@
+nimcache/
+tests/*
+!tests/*.nim
+!tests/config.nims
+examples/*
+!examples/*.nim
+!examples/config.nims
+bench/*
+!bench/*.nim
+!bench/config.nims
+.DS_Store
