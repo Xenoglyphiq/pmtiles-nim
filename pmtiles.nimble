@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.0.0"
+version       = "0.1.0"
 author        = "Xenoglyphiq contributors"
 description   = "Read PMTiles v3 tile archives: header, directories, tile lookup and tile bytes"
 license       = "MIT OR Apache-2.0"
