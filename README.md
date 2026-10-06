@@ -8,7 +8,10 @@ Requires Nim **2.2.12** on the C backend (the JS backend is untested). Depends o
 
 ## Install
 
-> Not released yet. Once `v0.1.0` is tagged, install by URL:
+> **Not released yet.** Until the first release, install the default branch:
+> `nimble install https://github.com/Xenoglyphiq/pmtiles-nim`
+
+Once `v0.1.0` is tagged:
 
 ```
 nimble install https://github.com/Xenoglyphiq/pmtiles-nim@#v0.1.0
@@ -127,6 +130,14 @@ Every public proc is annotated `{.raises: [PMTilesError].}` (or raises nothing).
 | `nimble examples` | The three canonical examples |
 | `FUZZ_SECONDS=600 nimble fuzz` | Mutation-fuzz the decoders and `getTile` (`FUZZ_SEED` replays a run) |
 | `nimble bench` | `getTile` timings on `.spec/bench/` (`-d:release`; `BENCH_DIR` overrides the directory) |
+
+## Performance
+
+| Benchmark | Reference | This port | Ratio |
+|---|---|---|---|
+| `get_tile`, stateless | Rust `pmtiles` 0.24.1: 165.1 ms | 222.8 ms | 1.35× |
+
+Median per pass of 10,000 lookups from memory, method in `.spec/bench/README.md`. Recorded 2026-10-06 on an Apple M5 Pro, interleaved with the reference in one session (median of three rounds). Nim 2.2.12, `-d:release`.
 
 ## License
 
