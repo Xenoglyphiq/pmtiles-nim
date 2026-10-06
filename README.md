@@ -1,6 +1,6 @@
 # PMTiles for Nim
 
-Read PMTiles v3 single-file tile archives: header, directories, tile lookup and tile bytes, from memory, a local file or HTTP range requests. Implements PMTiles v3 (read only) · Spec v0.1.0 · Conformance: **core ✓ io ✓ full ✓** (68/68)
+Read PMTiles v3 single-file tile archives: header, directories, tile lookup and tile bytes, from memory, a local file or HTTP range requests. Implements PMTiles v3 (read only) · Spec v0.1.1 · Conformance: **core ✓ io ✓ full ✓** (68/68)
 
 > **Tile bytes are returned as stored.** `getTile` gives you the tile still compressed with `header.tileCompression` and doesn't parse it. Decoding MVT, PNG or other contents is up to you.
 
